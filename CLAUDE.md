@@ -1,67 +1,509 @@
 # ClassNest - Agent Context
 
-Flutter app (Material 3) for students of Divine Word College of Legazpi (Group LAB'D, CC105). Students keep their class schedule, see which room each class is in, track which rooms are in use, and get notified in-app when a room changes. All data is local to the phone: no backend, no Firebase.
+Flutter application built with Material 3 for students of Divine Word College of Legazpi (Group DPinili, CC105A).
 
-Naming: the app is called ClassNest. The Dart package, folder and database file are still named `classnav` (imports use `package:classnav/...`), so do not rename them.
+ClassNest allows students to manage their class schedules and subjects, view classroom assignments, track room usage, and receive in-app room-change updates. Administrators can manage registered students' subjects and schedules.
+
+The app uses **Firebase Authentication and Cloud Firestore as its primary authentication and cloud data backend**. SQLite is retained as a local backup; do not treat it as the primary source of student schedules or subjects.
+
+Naming: the app is called `ClassNest`. The Dart package, folder, and database file are still named `classnav`. Imports use `package:classnav/...`. Do not rename them.
+
+---
 
 ## Commands
-- `flutter pub get` - install packages
-- `flutter run` - run the app
-- `flutter analyze` - must report no issues (flutter_lints is on)
-- `flutter test` - runs `test/time_utils_test.dart` and `test/widget_test.dart`
+
+- `flutter pub get` - install packages.
+- `flutter run` - run the app.
+- `flutter analyze` - must report no issues.
+- `flutter test` - run the project tests.
+
+Run `flutter analyze` after code changes and fix all reported issues.
+
+---
 
 ## Architecture
-Layers under `lib/`. Each layer only depends on the ones listed after it.
 
-| Layer | Folder | Job |
+The project is organized under `lib/`.
+
+| Layer | Folder | Responsibility |
 |---|---|---|
-| UI | `ui/pages`, `ui/templates`, `ui/organisms`, `ui/molecules`, `ui/atoms` | Screens and widgets (Atomic Design) |
-| State | `providers/` | `ChangeNotifier`s the UI reads with `provider` |
-| Data access | `services/` | Local database, saved settings, account checks |
-| Models | `models/` | Plain data classes |
-| Core | `core/` | Routes, theme, subject colors, `TimeUtils`, `Validators` |
-| Routing | `routing/` | `AppRouter.onGenerateRoute` |
+| UI | `ui/pages`, `ui/templates`, `ui/organisms`, `ui/molecules`, `ui/atoms` | Screens and reusable widgets using Atomic Design |
+| State | `providers/` | `ChangeNotifier` classes used by the UI |
+| Data access | `services/` | Firebase Authentication, Firestore access, local database, and saved settings |
+| Models | `models/` | Plain Dart data classes |
+| Core | `core/` | Routes, theme, subject colors, `TimeUtils`, and `Validators` |
+| Routing | `routing/` | `AppRouter.onGenerateRoute` and route configuration |
 
-Dependency direction: pages -> providers -> services -> models. Pages never call a service or the database directly.
+Dependency direction:
 
-### Atomic Design rules (`ui/`)
-- **atoms**: smallest widgets with no app logic (`AppButton`, `AppTextField`, `ColorDot`).
-- **molecules**: small combinations (`DaySelector`, `RoomBadge`, `EmptyState`, `RoleSelector`, pickers, `TimeField`, `confirmDelete`).
-- **organisms**: larger sections tied to the app's data (`ClassCard`, `SubjectTile`, `RoomCard`, `SubjectForm`, `SessionForm`, `SignInForm`). Forms receive data and an `onSubmit` callback; they do not save anything themselves.
-- **templates**: `PageTemplate` is the only page layout (app bar, safe area, 640 px max width, optional FAB and bottom bar). Every page uses it.
-- **pages**: wire providers to organisms. They own screen-level state (selected day, saving flag).
+- Student pages generally use providers for application state.
+- Providers use services for data access.
+- Services communicate with Firebase, SQLite, or preferences as appropriate.
+- Models contain data and mapping logic.
+- Admin management pages may access the shared `FirestoreService` through Provider when their functionality requires direct Firestore operations.
 
-### Startup and navigation flow
-`main.dart` -> `MultiProvider` (ThemeProvider, AuthProvider, ScheduleProvider) -> `ClassNestApp` -> route `/` -> `AuthGate`:
-- loading -> spinner; signed out -> `SignInPage`; signed in -> `HomePage`.
-- `HomePage` holds four tabs in an `IndexedStack` with a `NavigationBar`: Schedule, Subjects, Rooms, Settings. FABs show only on Schedule ("Add class") and Subjects ("Add subject").
-- Only the two form pages are pushed routes (`AppRoutes.subjectForm`, `AppRoutes.sessionForm`), with the item to edit passed as `arguments`.
+Do not introduce unnecessary dependencies between layers.
 
-## Data
-- `Subject`: id, code (unique, case-insensitive), name, instructor?, colorValue.
-- `ClassSession`: id, subjectId, dayOfWeek, startMinutes, endMinutes, room, previousRoom?, roomChangedAtMillis?. `hasRoomChange` is true when both room-change fields are set.
-- `RoomStatus`: room, current?, next?, changed?. Computed in `ScheduleProvider.roomStatuses(now)`; never stored.
-- `AppUser`: email, role (`UserRole.student` or `UserRole.admin`).
-- SQLite (`classnav.db`, version 2): `subjects`, `class_sessions` (FK to subjects, ON DELETE CASCADE), `users`. Any schema change needs a version bump and an `onUpgrade` step.
+---
 
-## Key behavior (keep it working)
-- **Room change detection** happens in `DatabaseService.updateSession`: if the trimmed room differs from the stored one, it saves `previousRoom` = old room and `roomChangedAtMillis` = now. Forms must carry the existing `previousRoom` and `roomChangedAtMillis` through when editing. "Got it" calls `dismissRoomChange`, which clears both.
-- **Overlap check**: `saveSession` rejects a class that overlaps any other class on the same day (`hasConflict`, ignoring the session being edited).
-- **Room Tracker**: `roomStatuses` groups sessions by trimmed, lower-cased room, finds the class running now (today, start <= now < end), the next class later today, and the latest changed class; sorted A to Z. `RoomsPage` refreshes with a one-minute `Timer` and cancels it in `dispose`.
-- **Auth**: `AuthService` lower-cases and trims emails and stores `sha256(salt + password)` with a random salt. `AuthProvider` saves the signed-in email in `PreferencesService` and restores it in `load()`. The role is only shown in Settings; it does not restrict anything yet.
+## Firebase and authentication
+
+Firebase is initialized in `main.dart`.
+
+The app uses:
+
+- Firebase Authentication for account registration, login, and sign-out.
+- Cloud Firestore for student accounts, subjects, and schedules.
+- `AuthService` to authenticate users and determine their roles.
+- `AuthProvider` to expose the current authenticated user and loading state.
+- `AuthGate` to direct authenticated users to the correct part of the app.
+
+### User roles
+
+The application supports two roles:
+
+```dart
+enum UserRole {
+  student,
+  admin,
+}
+```
+
+`AppUser` contains:
+
+- `uid`
+- `email`
+- `role`
+
+The `roleLabel` getter displays either `Student` or `Admin`.
+
+### Role resolution
+
+`AuthService` checks the authenticated user's admin document first:
+
+1. Check `admin/{uid}`.
+2. If a valid admin record exists with `role == "admin"`, return an admin user.
+3. Otherwise, check `users/{uid}`.
+4. A valid student record with `role == "student"` is returned as a student.
+5. Invalid or missing role records must not be treated as authorized users.
+
+Registration creates student accounts only. Do not allow ordinary student registration to assign the admin role.
+
+### Role-based navigation
+
+`AuthGate` handles authentication and navigation:
+
+- Loading authentication state -> loading indicator.
+- Signed out -> `SignInPage`.
+- Signed in as student -> existing `HomePage`.
+- Signed in as admin -> `AdminDashboardPage`.
+
+Keep student and admin navigation separate. Do not accidentally send admins to the student home page.
+
+---
+
+## Firestore data structure
+
+The primary cloud data structure is:
+
+```text
+users/{studentUID}
+  email
+  role: "student"
+
+admin/{adminUID}
+  email
+  role: "admin"
+
+subjects/{subjectDocID}
+  studentId
+  code
+  name
+  instructor
+  colorValue
+
+schedules/{scheduleDocID}
+  studentId
+  subjectId
+  dayOfWeek
+  startMinutes
+  endMinutes
+  room
+```
+
+### Data ownership
+
+- Every subject belongs to a student through `studentId`.
+- Every schedule belongs to a student through `studentId`.
+- Every schedule references a subject through `subjectId`.
+- Firestore document IDs are used as record IDs.
+- Student data must remain isolated by authenticated UID.
+- Students must only read and modify their own subjects and schedules.
+- Admins can read and manage all student subjects and schedules.
+
+Firestore security rules are essential. Never rely only on UI filtering to protect student data.
+
+Admin account documents must not be writable by ordinary student clients. Keep admin authorization controlled by trusted setup and Firestore security rules.
+
+### Shared Firestore service
+
+`FirestoreService` is provided through Provider and handles Firestore operations.
+
+Important methods include:
+
+- `getStudents()`
+- `getSubjects({required String studentId})`
+- `saveSubject({String? id, required Map<String, dynamic> data})`
+- `deleteSubject(String id)`
+- `getSchedules({required String studentId})`
+- `getAllSchedules()`
+- `saveSchedule({String? id, required Map<String, dynamic> data})`
+- `deleteSchedule(String id)`
+- `hasScheduleConflict(...)`
+
+Firestore document results are mapped to Dart maps containing an `id` field.
+
+Reuse these service methods instead of duplicating Firestore queries in widgets.
+
+---
+
+## Main application structure
+
+`main.dart` initializes Firebase and configures the application's providers.
+
+The shared providers include:
+
+- `ThemeProvider`
+- `AuthProvider`
+- `FirestoreService`
+- `ScheduleProvider`
+
+`ScheduleProvider` receives the current student's UID from `AuthProvider`. When authentication changes, update the provider's student ID so student schedule data is loaded for the correct account.
+
+Do not allow schedules from a previously signed-in student to remain visible after switching accounts.
+
+---
+
+## Student interface
+
+The student interface remains the existing four-tab `HomePage`, using an `IndexedStack` and `NavigationBar`.
+
+Tabs:
+
+1. Schedule
+2. Subjects
+3. Rooms
+4. Settings
+
+### Schedule
+
+- Displays the authenticated student's own schedules.
+- Supports adding and editing class sessions.
+- Uses `ScheduleProvider` for schedule state.
+- Uses the existing schedule form components.
+- Keeps schedule conflict validation.
+
+### Subjects
+
+- Displays only the authenticated student's subjects.
+- Supports adding and editing subjects.
+- Subjects are stored in Firestore and associated with the student's UID.
+
+### Rooms
+
+- Displays room usage based on schedule information.
+- Keeps existing room-tracking behavior and room-change notifications.
+- Do not create a separate room collection unless explicitly requested.
+
+### Settings
+
+- Keeps existing theme and account settings.
+- Displays the authenticated user's role where appropriate.
+- Supports signing out.
+
+---
+
+## Admin interface
+
+`AdminDashboardPage` is the landing page for authenticated administrators.
+
+It provides access to four management sections:
+
+1. Students
+2. Subjects
+3. Schedules
+4. Room Management
+
+Keep the admin dashboard and its navigation separate from the student tab interface.
+
+### Students management
+
+`StudentsManagementPage` displays registered student accounts.
+
+Selecting a student opens `StudentDetailsPage`, which displays that student's subjects and schedules.
+
+### Student details
+
+`StudentDetailsPage`:
+
+- Displays the selected student's email.
+- Loads that student's subjects.
+- Loads that student's schedules.
+- Resolves subject names from their subject IDs.
+- Provides access to adding a schedule for that student.
+
+### Subject management
+
+`AdminSubjectsManagementPage` displays registered students and lets the administrator select a student.
+
+`AdminStudentSubjectsPage` manages the selected student's subjects.
+
+Administrators can:
+
+- Add subjects.
+- Edit subjects.
+- Delete subjects when they are not referenced by existing schedules.
+
+When deleting a subject, check whether schedules reference its ID. Prevent deletion if it would leave schedules with invalid subject references.
+
+Use the existing `SubjectForm` rather than creating a separate form implementation.
+
+### Schedule management
+
+`AdminSchedulesManagementPage` displays schedules across students.
+
+Administrators can:
+
+- View all schedules.
+- Filter schedules by student.
+- Search for a student by email using the search icon.
+- Add schedules for a selected student.
+- Edit existing schedules.
+- Delete schedules.
+- View the subject, student email, day, time, and room.
+
+The student email search should filter the student selection, not modify stored student email data.
+
+Use `AdminScheduleData` to load and organize student, subject, and schedule information.
+
+Use `AdminSessionFormPage` for adding and editing schedules.
+
+When editing, pass the existing `ClassSession` as `initial` so the form retains its current values.
+
+### Room management
+
+`AdminRoomManagementPage` displays room assignments grouped by room.
+
+Room assignments are stored in the `room` field of schedule documents. Do not create a separate room collection for ordinary room management.
+
+Editing a room assignment should update the associated schedule through the existing admin schedule form.
+
+---
+
+## Models
+
+### Subject
+
+`Subject` contains:
+
+- `id`
+- `code`
+- `name`
+- `instructor`
+- `colorValue`
+
+It provides:
+
+- `toMap()`
+- `fromMap()`
+
+Subject records are associated with a student in Firestore through `studentId`.
+
+### ClassSession
+
+`ClassSession` contains:
+
+- `id`
+- `studentId`
+- `subjectId`
+- `dayOfWeek`
+- `startMinutes`
+- `endMinutes`
+- `room`
+- `previousRoom`
+- `roomChangedAtMillis`
+
+It provides:
+
+- `toMap()`
+- `fromMap()`
+- `copyWith()`
+
+Preserve all existing fields when editing a schedule. In particular, do not accidentally discard room-change information.
+
+### AppUser
+
+`AppUser` contains:
+
+- `uid`
+- `email`
+- `role`
+
+Use `UserRole.student` and `UserRole.admin` instead of comparing role labels throughout the UI.
+
+### RoomStatus
+
+`RoomStatus` represents computed room information, including current, next, and changed class information.
+
+Room status is derived from schedule data; it is not a separate Firestore entity.
+
+---
+
+## Schedule and room behavior
+
+### Schedule conflict checking
+
+Use `FirestoreService.hasScheduleConflict(...)` when saving a schedule.
+
+The check must:
+
+- Compare schedules belonging to the same student.
+- Check the same day.
+- Detect overlapping time ranges.
+- Exclude the current schedule when editing.
+
+Do not remove existing conflict validation when modifying schedule forms.
+
+### Room tracking
+
+Keep the existing room-tracking functionality.
+
+Room status is derived from schedule information:
+
+- A current class is one running today where `startMinutes <= now < endMinutes`.
+- The next class is the next scheduled class later that day.
+- Room comparisons should use trimmed, case-insensitive room names.
+- Keep the existing sorting and display behavior.
+
+### Room changes
+
+Preserve the existing room-change fields:
+
+- `previousRoom`
+- `roomChangedAtMillis`
+
+When a room changes, preserve the previous room and the change timestamp according to the existing room-change logic.
+
+The student-facing room-change notification and its dismissal behavior must continue to work.
+
+Do not remove these fields from `ClassSession`, its mapping methods, or the relevant forms.
+
+---
+
+## Forms and Atomic Design
+
+Keep the existing Atomic Design structure under `ui/`.
+
+- **Atoms:** small reusable widgets such as `AppButton`, `AppTextField`, and `ColorDot`.
+- **Molecules:** combinations such as `DaySelector`, `RoomBadge`, `EmptyState`, `RoleSelector`, pickers, `TimeField`, and `confirmDelete`.
+- **Organisms:** larger components such as `ClassCard`, `SubjectTile`, `RoomCard`, `SubjectForm`, `SessionForm`, and `SignInForm`.
+- **Templates:** reusable page layouts where applicable.
+- **Pages:** connect data services/providers to UI components and own screen-level state.
+
+Forms should receive initial data and callbacks. They should not independently create Firestore queries or bypass the page/service save flow.
+
+Use the existing `SubjectForm` and `SessionForm` for both student and admin workflows where appropriate.
+
+`SessionForm` supports an optional `studentId` for administrator workflows. When no student ID is supplied, use the authenticated student's UID.
+
+`AdminSessionFormPage` must support both adding and editing schedules.
+
+---
+
+## SQLite backup
+
+SQLite remains part of the project as a local backup.
+
+The database file remains named `classnav.db`.
+
+Do not assume SQLite is the primary source of truth for current student or admin schedule-management screens. Those workflows use Firestore.
+
+If changing SQLite schema or backup behavior:
+
+- Update the database version.
+- Add the appropriate `onUpgrade` migration.
+- Keep existing data compatibility in mind.
+- Do not remove SQLite functionality without an explicit request.
+
+---
 
 ## Conventions
-- **Values**: days are 1 (Monday) to 7 (Sunday). Times are minutes since midnight (0-1440). Format them only through `TimeUtils`.
-- **Routes**: use `AppRoutes` constants; never hard-code route strings.
-- **Validation**: text-input rules live in `Validators` and return an error string or null.
-- **Provider methods that save or delete** return `Future<String?>`: an error message, or null on success. Pages show the message in a `SnackBar`. Providers catch exceptions and return friendly text; they do not throw to the UI.
-- **After any `await` in a widget**, check `mounted` before using `context` or `setState`. Read providers (`context.read`) and the messenger before the `await` when the widget may be disposed.
-- Use `context.watch` in `build`, `context.read` in callbacks.
-- **Preferences and database calls** are wrapped in `try/catch`; a failed save must not break the current session (add a short comment in empty `catch` blocks).
-- Imports are relative (`../../...`), files are `snake_case.dart`, one main class per file, constructors use `super.key` and `const` where possible.
-- Add a short `///` comment on classes and non-obvious methods; keep comments plain.
-- Every list or page that can be empty uses `EmptyState` with a clear title and message.
-- Theme colors come from `Theme.of(context).colorScheme`; subject colors come from `subjectColorValues`. Do not hard-code other colors in widgets.
 
-## Scope
-Keep changes small and inside this structure. Do not add packages, screens or features that were not asked for. If a new field is added to a model, update `toMap`, `fromMap`, `copyWith`, the database schema (with migration) and the form that edits it.
+### Values
+
+- Days use integers from 1 (Monday) to 7 (Sunday).
+- Times are minutes since midnight.
+- Valid time values are from 0 to 1440.
+- Use `TimeUtils` for time formatting where applicable.
+
+### Routes
+
+Use `AppRoutes` constants and `AppRouter.onGenerateRoute` for named routes. Do not hard-code route strings when a route constant exists.
+
+Use `MaterialPageRoute` for existing admin navigation patterns unless the routing structure is intentionally being changed.
+
+### Validation
+
+Text-input validation belongs in `Validators`.
+
+Validators return an error message or `null`.
+
+### Provider and state
+
+- Use `context.watch` in `build` when the UI should react to provider changes.
+- Use `context.read` in callbacks and one-time service access.
+- Keep screen-specific state inside the relevant page.
+- Keep shared application state inside providers.
+- Do not duplicate authentication or schedule state unnecessarily.
+
+### Async safety
+
+After an `await` in a widget, check `mounted` before calling `setState` or using `context`.
+
+Handle Firebase and database exceptions appropriately. Show understandable feedback through `SnackBar` or the existing error UI.
+
+### Code style
+
+- Imports should follow the existing project conventions.
+- Use relative imports where the existing files do.
+- File names use `snake_case.dart`.
+- Prefer one main class per file.
+- Use `const` constructors where possible.
+- Use `super.key` in widget constructors.
+- Add short `///` documentation comments to classes and non-obvious methods.
+- Avoid unnecessary packages and duplicate implementations.
+
+### UI styling
+
+- Use `Theme.of(context).colorScheme` for theme colors.
+- Use `subjectColorValues` for subject colors.
+- Keep Material 3 styling consistent.
+- Do not introduce arbitrary hard-coded colors into widgets.
+- Keep existing student UI behavior and appearance unless a change is requested.
+
+---
+
+## Scope and development rules
+
+1. Preserve existing Firebase Authentication and Firestore functionality.
+2. Preserve student/admin role separation.
+3. Never expose one student's schedules or subjects to another student.
+4. Keep admin access protected by Firestore security rules.
+5. Keep existing student tabs, theme behavior, room tracking, and room-change notifications.
+6. Keep SQLite as a backup; do not replace Firestore with SQLite.
+7. Reuse existing models, services, providers, and forms before adding new implementations.
+8. Do not rename the `classnav` package or database.
+9. Do not add packages, screens, or features that were not requested.
+10. When adding model fields, update mapping methods, forms, Firestore data handling, and SQLite migrations if applicable.
+11. Run `flutter analyze` after changes and resolve all reported issues.
+12. Prefer complete, consistent file updates over isolated snippets when replacing an existing file.

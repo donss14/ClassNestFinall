@@ -1,8 +1,11 @@
+
 import 'package:flutter/material.dart';
+import 'package:provider/provider.dart';
 
 import '../../core/utils/validators.dart';
 import '../../models/class_session.dart';
 import '../../models/subject.dart';
+import '../../providers/auth_provider.dart';
 import '../atoms/app_button.dart';
 import '../atoms/app_text_field.dart';
 import '../molecules/day_selector.dart';
@@ -16,6 +19,7 @@ class SessionForm extends StatefulWidget {
     this.initial,
     required this.onSubmit,
     this.isSaving = false,
+    this.studentId,
   });
 
   final List<Subject> subjects;
@@ -23,24 +27,32 @@ class SessionForm extends StatefulWidget {
   final void Function(ClassSession session) onSubmit;
   final bool isSaving;
 
+  // Optional target student UID for admin-created schedules.
+  final String? studentId;
+
   @override
   State<SessionForm> createState() => _SessionFormState();
 }
 
 class _SessionFormState extends State<SessionForm> {
   final _formKey = GlobalKey<FormState>();
+
   late final TextEditingController _room;
-  int? _subjectId;
+
+  String? _subjectId;
   late int _day;
   late int _start;
   late int _end;
+
   String? _subjectError;
   String? _timeError;
 
   @override
   void initState() {
     super.initState();
+
     final s = widget.initial;
+
     _room = TextEditingController(text: s?.room ?? '');
     _subjectId = s?.subjectId;
     _day = s?.dayOfWeek ?? DateTime.now().weekday;
@@ -56,43 +68,76 @@ class _SessionFormState extends State<SessionForm> {
 
   Future<void> _pickTime({required bool isStart}) async {
     final current = isStart ? _start : _end;
+
     final picked = await showTimePicker(
       context: context,
-      initialTime: TimeOfDay(hour: current ~/ 60, minute: current % 60),
+      initialTime: TimeOfDay(
+        hour: current ~/ 60,
+        minute: current % 60,
+      ),
     );
+
     if (picked == null) return;
+
     setState(() {
       final minutes = picked.hour * 60 + picked.minute;
+
       if (isStart) {
         _start = minutes;
       } else {
         _end = minutes;
       }
+
       _timeError = null;
     });
   }
 
   void _submit() {
     final fieldsValid = _formKey.currentState!.validate();
-    final subjectError = _subjectId == null ? 'Choose a subject' : null;
+
+    final subjectError =
+        _subjectId == null ? 'Choose a subject' : null;
+
     final timeError = Validators.timeRange(_start, _end);
+
     setState(() {
       _subjectError = subjectError;
       _timeError = timeError;
     });
-    if (!fieldsValid || subjectError != null || timeError != null) return;
+
+    if (!fieldsValid || subjectError != null || timeError != null) {
+      return;
+    }
+
+    // Admin form supplies a target UID.
+    // Student form continues using the signed-in user's UID.
+    final studentId =
+        widget.studentId ?? context.read<AuthProvider>().user?.uid;
+
+    if (studentId == null) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(
+          content: Text('Please sign in before adding a class.'),
+        ),
+      );
+      return;
+    }
 
     final initial = widget.initial;
-    widget.onSubmit(ClassSession(
-      id: initial?.id,
-      subjectId: _subjectId!,
-      dayOfWeek: _day,
-      startMinutes: _start,
-      endMinutes: _end,
-      room: _room.text.trim(),
-      previousRoom: initial?.previousRoom,
-      roomChangedAtMillis: initial?.roomChangedAtMillis,
-    ));
+
+    widget.onSubmit(
+      ClassSession(
+        id: initial?.id,
+        studentId: studentId,
+        subjectId: _subjectId!,
+        dayOfWeek: _day,
+        startMinutes: _start,
+        endMinutes: _end,
+        room: _room.text.trim(),
+        previousRoom: initial?.previousRoom,
+        roomChangedAtMillis: initial?.roomChangedAtMillis,
+      ),
+    );
   }
 
   @override
@@ -106,13 +151,18 @@ class _SessionFormState extends State<SessionForm> {
             subjects: widget.subjects,
             selectedId: _subjectId,
             errorText: _subjectError,
-            onChanged: (id) => setState(() {
-              _subjectId = id;
-              _subjectError = null;
-            }),
+            onChanged: (id) {
+              setState(() {
+                _subjectId = id;
+                _subjectError = null;
+              });
+            },
           ),
           const SizedBox(height: 20),
-          Text('Day', style: Theme.of(context).textTheme.labelLarge),
+          Text(
+            'Day',
+            style: Theme.of(context).textTheme.labelLarge,
+          ),
           const SizedBox(height: 8),
           Align(
             alignment: Alignment.centerLeft,

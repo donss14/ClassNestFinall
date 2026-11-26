@@ -1,4 +1,4 @@
-
+import 'package:flutter/foundation.dart';
 import 'package:firebase_auth/firebase_auth.dart';
 import 'package:cloud_firestore/cloud_firestore.dart';
 
@@ -51,6 +51,7 @@ class AuthService {
     }
 
     return AppUser(
+      uid: firebaseUser.uid,
       email: clean,
       role: UserRole.student,
     );
@@ -58,22 +59,30 @@ class AuthService {
 
   // SIGN IN
   Future<AppUser?> signIn({
-    required String email,
-    required String password,
-  }) async {
-    final clean = email.trim().toLowerCase();
+  required String email,
+  required String password,
+}) async {
+  final clean = email.trim().toLowerCase();
 
-    final credential = await _auth.signInWithEmailAndPassword(
-      email: clean,
-      password: password,
-    );
+  debugPrint('ADMIN DEBUG: Starting Firebase sign-in');
 
-    final firebaseUser = credential.user;
+  final credential = await _auth.signInWithEmailAndPassword(
+    email: clean,
+    password: password,
+  );
 
-    if (firebaseUser == null) return null;
+  final firebaseUser = credential.user;
 
-    return _getAppUser(firebaseUser.uid);
+  if (firebaseUser == null) {
+    debugPrint('ADMIN DEBUG: Firebase user is null');
+    return null;
   }
+
+  debugPrint('ADMIN DEBUG: Firebase authentication successful');
+  debugPrint('ADMIN DEBUG: Auth UID = ${firebaseUser.uid}');
+
+  return _getAppUser(firebaseUser.uid);
+}
 
   // RESTORE CURRENT USER
   Future<AppUser?> getCurrentUser() async {
@@ -85,57 +94,56 @@ class AuthService {
   }
 
   // GET USER PROFILE FROM FIRESTORE
-  
-Future<AppUser?> _getAppUser(String uid) async {
-  // First check the admin collection.
+  Future<AppUser?> _getAppUser(String uid) async {
+  debugPrint('ADMIN DEBUG: Checking admin collection');
+
   final adminDoc = await _firestore
       .collection('admin')
       .doc(uid)
       .get();
 
+  debugPrint('ADMIN DEBUG: Admin document exists = ${adminDoc.exists}');
+
   if (adminDoc.exists) {
     final data = adminDoc.data()!;
 
+    debugPrint('ADMIN DEBUG: Role = ${data['role']}');
+    debugPrint('ADMIN DEBUG: Email field is String = ${data['email'] is String}');
+
+    if (data['role'] != 'admin' || data['email'] is! String) {
+      debugPrint('ADMIN DEBUG: Admin profile validation failed');
+      return null;
+    }
+
+    debugPrint('ADMIN DEBUG: Admin profile accepted');
+
     return AppUser(
-      email: (data['email'] as String)
-          .replaceAll('"', '')
-          .replaceAll("'", '')
-          .trim()
-          .toLowerCase(),
+      uid: uid,
+      email: data['email'] as String,
       role: UserRole.admin,
     );
   }
 
-  // If not an admin, check the students collection.
-  final userDoc = await _firestore
+  debugPrint('ADMIN DEBUG: Checking student collection');
+
+  final studentDoc = await _firestore
       .collection('users')
       .doc(uid)
       .get();
 
-  if (!userDoc.exists) {
-    throw StateError('User profile not found.');
-  }
+  debugPrint('ADMIN DEBUG: Student document exists = ${studentDoc.exists}');
 
-  final data = userDoc.data()!;
+  if (!studentDoc.exists) return null;
 
-  final email = (data['email'] as String)
-      .replaceAll('"', '')
-      .replaceAll("'", '')
-      .trim()
-      .toLowerCase();
+  final data = studentDoc.data()!;
 
-  final roleValue = (data['role'] as String)
-      .replaceAll('"', '')
-      .replaceAll("'", '')
-      .trim()
-      .toLowerCase();
-
-  if (roleValue != 'student') {
-    throw StateError('Invalid student role.');
+  if (data['role'] != 'student' || data['email'] is! String) {
+    return null;
   }
 
   return AppUser(
-    email: email,
+    uid: uid,
+    email: data['email'] as String,
     role: UserRole.student,
   );
 }

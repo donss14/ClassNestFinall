@@ -1,3 +1,4 @@
+
 class Subject {
   const Subject({
     this.id,
@@ -7,34 +8,35 @@ class Subject {
     required this.colorValue,
   });
 
-  final int? id;
+  // Firestore document ID
+  final String? id;
+
   final String code;
   final String name;
   final String? instructor;
   final int colorValue;
 
-  Map<String, Object?> toMap() {
+  Map<String, dynamic> toMap() {
     return {
-      'id': id,
       'code': code,
       'name': name,
       'instructor': instructor,
-      'color_value': colorValue,
+      'colorValue': colorValue,
     };
   }
 
-  factory Subject.fromMap(Map<String, Object?> map) {
+  factory Subject.fromMap(Map<String, dynamic> map, {String? id}) {
     return Subject(
-      id: map['id'] as int?,
+      id: id ?? map['id'] as String?,
       code: map['code'] as String,
       name: map['name'] as String,
       instructor: map['instructor'] as String?,
-      colorValue: map['color_value'] as int,
+      colorValue: map['colorValue'] as int,
     );
   }
 
   Subject copyWith({
-    int? id,
+    String? id,
     String? code,
     String? name,
     String? instructor,

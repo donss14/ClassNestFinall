@@ -1,6 +1,8 @@
+
 class ClassSession {
   const ClassSession({
     this.id,
+    required this.studentId,
     required this.subjectId,
     required this.dayOfWeek,
     required this.startMinutes,
@@ -10,8 +12,15 @@ class ClassSession {
     this.roomChangedAtMillis,
   });
 
-  final int? id;
-  final int subjectId;
+  // Firestore document ID
+  final String? id;
+
+  // Firebase Authentication UID of the student
+  final String studentId;
+
+  // Firestore document ID of the subject
+  final String subjectId;
+
   final int dayOfWeek;
   final int startMinutes;
   final int endMinutes;
@@ -22,35 +31,40 @@ class ClassSession {
   bool get hasRoomChange =>
       previousRoom != null && roomChangedAtMillis != null;
 
-  Map<String, Object?> toMap() {
+  Map<String, dynamic> toMap() {
     return {
-      'id': id,
-      'subject_id': subjectId,
-      'day_of_week': dayOfWeek,
-      'start_minutes': startMinutes,
-      'end_minutes': endMinutes,
+      'studentId': studentId,
+      'subjectId': subjectId,
+      'dayOfWeek': dayOfWeek,
+      'startMinutes': startMinutes,
+      'endMinutes': endMinutes,
       'room': room,
-      'previous_room': previousRoom,
-      'room_changed_at': roomChangedAtMillis,
+      'previousRoom': previousRoom,
+      'roomChangedAtMillis': roomChangedAtMillis,
     };
   }
 
-  factory ClassSession.fromMap(Map<String, Object?> map) {
+  factory ClassSession.fromMap(
+    Map<String, dynamic> map, {
+    String? id,
+  }) {
     return ClassSession(
-      id: map['id'] as int?,
-      subjectId: map['subject_id'] as int,
-      dayOfWeek: map['day_of_week'] as int,
-      startMinutes: map['start_minutes'] as int,
-      endMinutes: map['end_minutes'] as int,
+      id: id ?? map['id'] as String?,
+      studentId: map['studentId'] as String,
+      subjectId: map['subjectId'] as String,
+      dayOfWeek: map['dayOfWeek'] as int,
+      startMinutes: map['startMinutes'] as int,
+      endMinutes: map['endMinutes'] as int,
       room: map['room'] as String,
-      previousRoom: map['previous_room'] as String?,
-      roomChangedAtMillis: map['room_changed_at'] as int?,
+      previousRoom: map['previousRoom'] as String?,
+      roomChangedAtMillis: map['roomChangedAtMillis'] as int?,
     );
   }
 
   ClassSession copyWith({
-    int? id,
-    int? subjectId,
+    String? id,
+    String? studentId,
+    String? subjectId,
     int? dayOfWeek,
     int? startMinutes,
     int? endMinutes,
@@ -60,6 +74,7 @@ class ClassSession {
   }) {
     return ClassSession(
       id: id ?? this.id,
+      studentId: studentId ?? this.studentId,
       subjectId: subjectId ?? this.subjectId,
       dayOfWeek: dayOfWeek ?? this.dayOfWeek,
       startMinutes: startMinutes ?? this.startMinutes,

@@ -1,3 +1,4 @@
+
 import 'package:flutter/material.dart';
 
 import '../../models/subject.dart';
@@ -14,13 +15,14 @@ class SubjectPicker extends StatelessWidget {
   });
 
   final List<Subject> subjects;
-  final int? selectedId;
-  final ValueChanged<int> onChanged;
+  final String? selectedId;
+  final ValueChanged<String> onChanged;
   final String? errorText;
 
   @override
   Widget build(BuildContext context) {
     final theme = Theme.of(context);
+
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
@@ -35,16 +37,22 @@ class SubjectPicker extends StatelessWidget {
                 avatar: ColorDot(color: Color(subject.colorValue)),
                 label: Text(subject.code),
                 selected: subject.id == selectedId,
-                onSelected: (_) => onChanged(subject.id!),
+                onSelected: (_) {
+                  if (subject.id != null) {
+                    onChanged(subject.id!);
+                  }
+                },
               ),
           ],
         ),
         if (errorText != null)
           Padding(
             padding: const EdgeInsets.only(top: 6),
-            child: Text(errorText!,
-                style: theme.textTheme.bodySmall
-                    ?.copyWith(color: theme.colorScheme.error)),
+            child: Text(
+              errorText!,
+              style: theme.textTheme.bodySmall
+                  ?.copyWith(color: theme.colorScheme.error),
+            ),
           ),
       ],
     );
