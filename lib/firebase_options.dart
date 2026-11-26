@@ -50,18 +50,18 @@ class DefaultFirebaseOptions {
   }
 
   static const FirebaseOptions android = FirebaseOptions(
-    apiKey: 'AIzaSyAiVNyrKVYji9xuHAEZX80WV90P9JZfKDc',
-    appId: '1:694995167350:android:37d921fb3a0f6cbcd21757',
-    messagingSenderId: '694995167350',
-    projectId: 'classnestfinallnatalaga',
-    storageBucket: 'classnestfinallnatalaga.firebasestorage.app',
+    apiKey: 'AIzaSyDng1GOCQ8_DSPc2xwvdc5FeqanR94nUTU',
+    appId: '1:163873575165:android:d743ac4cc44163dcccee94',
+    messagingSenderId: '163873575165',
+    projectId: 'finalclassnestapp',
+    storageBucket: 'finalclassnestapp.firebasestorage.app',
   );
   static const FirebaseOptions ios = FirebaseOptions(
-    apiKey: 'AIzaSyCISFymJVrrCArwL3EwadKx0O5gNrah_Kc',
-    appId: '1:694995167350:ios:b5be10db747c7fd4d21757',
-    messagingSenderId: '694995167350',
-    projectId: 'classnestfinallnatalaga',
-    storageBucket: 'classnestfinallnatalaga.firebasestorage.app',
+    apiKey: 'AIzaSyDKS_XsF6QYOkmA2xgjtUFUi1boawkwfBE',
+    appId: '1:163873575165:ios:cac509cca6a27136ccee94',
+    messagingSenderId: '163873575165',
+    projectId: 'finalclassnestapp',
+    storageBucket: 'finalclassnestapp.firebasestorage.app',
     iosBundleId: 'com.example.classnav',
   );
 }

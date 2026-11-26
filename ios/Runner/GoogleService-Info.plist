@@ -3,17 +3,17 @@
 <plist version="1.0">
 <dict>
 	<key>API_KEY</key>
-	<string>AIzaSyCISFymJVrrCArwL3EwadKx0O5gNrah_Kc</string>
+	<string>AIzaSyDKS_XsF6QYOkmA2xgjtUFUi1boawkwfBE</string>
 	<key>GCM_SENDER_ID</key>
-	<string>694995167350</string>
+	<string>163873575165</string>
 	<key>PLIST_VERSION</key>
 	<string>1</string>
 	<key>BUNDLE_ID</key>
 	<string>com.example.classnav</string>
 	<key>PROJECT_ID</key>
-	<string>classnestfinallnatalaga</string>
+	<string>finalclassnestapp</string>
 	<key>STORAGE_BUCKET</key>
-	<string>classnestfinallnatalaga.firebasestorage.app</string>
+	<string>finalclassnestapp.firebasestorage.app</string>
 	<key>IS_ADS_ENABLED</key>
 	<false></false>
 	<key>IS_ANALYTICS_ENABLED</key>
@@ -25,6 +25,6 @@
 	<key>IS_SIGNIN_ENABLED</key>
 	<true></true>
 	<key>GOOGLE_APP_ID</key>
-	<string>1:694995167350:ios:b5be10db747c7fd4d21757</string>
+	<string>1:163873575165:ios:cac509cca6a27136ccee94</string>
 </dict>
 </plist>
