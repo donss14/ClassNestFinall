@@ -2,7 +2,7 @@
 
 Flutter application built with Material 3 for students of Divine Word College of Legazpi (Group DPinili, CC105A).
 
-ClassNest allows students to manage their class schedules and subjects, view classroom assignments, track room usage, and receive in-app room-change updates. Administrators can manage registered students' subjects and schedules.
+ClassNest allows students to manage their class schedules and subjects, view classroom assignments, track room usage, and receive in-app room-change updates. Administrators can manage registered students' profiles, subjects, and schedules.
 
 The app uses **Firebase Authentication and Cloud Firestore as its primary authentication and cloud data backend**. SQLite is retained as a local backup; do not treat it as the primary source of student schedules or subjects.
 
@@ -53,7 +53,7 @@ Firebase is initialized in `main.dart`.
 The app uses:
 
 - Firebase Authentication for account registration, login, and sign-out.
-- Cloud Firestore for student accounts, subjects, and schedules.
+- Cloud Firestore for student profiles, subjects, and schedules.
 - `AuthService` to authenticate users and determine their roles.
 - `AuthProvider` to expose the current authenticated user and loading state.
 - `AuthGate` to direct authenticated users to the correct part of the app.
@@ -69,25 +69,78 @@ enum UserRole {
 }
 ```
 
-`AppUser` contains:
+### AppUser model
+
+`AppUser` currently contains:
 
 - `uid`
 - `email`
 - `role`
+- `name` (nullable)
+- `year` (nullable)
+- `course` (nullable)
 
-The `roleLabel` getter displays either `Student` or `Admin`.
+It also provides the `roleLabel` getter:
+
+- `Student` for `UserRole.student`
+- `Admin` for `UserRole.admin`
+
+The student profile fields are nullable because admin accounts do not require student information and older student accounts may not have these fields.
+
+Use `UserRole.student` and `UserRole.admin` rather than comparing role labels throughout the application.
 
 ### Role resolution
 
 `AuthService` checks the authenticated user's admin document first:
 
 1. Check `admin/{uid}`.
-2. If a valid admin record exists with `role == "admin"`, return an admin user.
+2. If a valid admin record exists with `role == "admin"` and a valid email, return an admin user.
 3. Otherwise, check `users/{uid}`.
-4. A valid student record with `role == "student"` is returned as a student.
-5. Invalid or missing role records must not be treated as authorized users.
+4. A valid student record with `role == "student"` and a valid email is returned as a student.
+5. For student users, load `name`, `year`, and `course` from Firestore when available.
+6. Invalid or missing role records must not be treated as authorized users.
 
-Registration creates student accounts only. Do not allow ordinary student registration to assign the admin role.
+Admin accounts do not need `name`, `year`, or `course`.
+
+### Registration
+
+Registration creates student accounts only.
+
+The registration form collects:
+
+- Full name
+- Year level
+- Course
+- Email
+- Password
+
+The year-level options are:
+
+- `1st Year`
+- `2nd Year`
+- `3rd Year`
+- `4th Year`
+
+The course is entered by the student.
+
+`AuthService.register()` validates the profile fields, creates the Firebase Authentication account, and saves the student profile in Firestore.
+
+The student document includes:
+
+```text
+users/{studentUID}
+  uid
+  email
+  role: "student"
+  name
+  year
+  course
+  createdAt
+```
+
+Do not allow ordinary student registration to assign the admin role.
+
+After successful registration, the returned `AppUser` should also contain the newly registered student's name, year, and course.
 
 ### Role-based navigation
 
@@ -108,8 +161,13 @@ The primary cloud data structure is:
 
 ```text
 users/{studentUID}
+  uid
   email
   role: "student"
+  name
+  year
+  course
+  createdAt
 
 admin/{adminUID}
   email
@@ -129,6 +187,8 @@ schedules/{scheduleDocID}
   startMinutes
   endMinutes
   room
+  previousRoom
+  roomChangedAtMillis
 ```
 
 ### Data ownership
@@ -178,7 +238,9 @@ The shared providers include:
 - `FirestoreService`
 - `ScheduleProvider`
 
-`ScheduleProvider` receives the current student's UID from `AuthProvider`. When authentication changes, update the provider's student ID so student schedule data is loaded for the correct account.
+`ScheduleProvider` receives the current student's UID from `AuthProvider`.
+
+When authentication changes, update the provider's student ID so student schedule data is loaded for the correct account.
 
 Do not allow schedules from a previously signed-in student to remain visible after switching accounts.
 
@@ -217,9 +279,33 @@ Tabs:
 
 ### Settings
 
-- Keeps existing theme and account settings.
-- Displays the authenticated user's role where appropriate.
-- Supports signing out.
+The Settings page displays the authenticated user's account information.
+
+For student accounts, display:
+
+- Student name
+- Email
+- Year level
+- Course
+- Account type / role
+
+For admin accounts, display the account email and admin role. Do not require student profile fields for administrators.
+
+If student profile fields are missing, show appropriate fallback text such as:
+
+- `Name not provided`
+- `Year not set`
+- `Course not set`
+
+The Settings page also keeps:
+
+- Sign-out functionality
+- System theme selection
+- Light theme selection
+- Dark theme selection
+- ClassNest About information
+
+Use `AuthProvider` to access the current `AppUser` and `ThemeProvider` for theme settings.
 
 ---
 
@@ -236,11 +322,44 @@ It provides access to four management sections:
 
 Keep the admin dashboard and its navigation separate from the student tab interface.
 
+### Common admin search and filters
+
+The admin Students, Subjects, Schedules, and Room Management pages include student search/filter functionality.
+
+Where applicable, support:
+
+- Search by student name or email.
+- Filter by year level: All Years, 1st Year, 2nd Year, 3rd Year, 4th Year.
+- Filter by course using available student course values from Firestore.
+
+Course filter options should be generated dynamically from student records rather than maintained as a hard-coded course list.
+
+The filters affect displayed results only. They must not modify stored student profile data.
+
+Display student profile details where appropriate:
+
+- Name
+- Email
+- Year level
+- Course
+
+Keep existing admin management functionality and navigation intact when adding or changing filters.
+
 ### Students management
 
 `StudentsManagementPage` displays registered student accounts.
 
-Selecting a student opens `StudentDetailsPage`, which displays that student's subjects and schedules.
+It supports:
+
+- Search by student name or email.
+- Filter by year level.
+- Filter by course.
+- Display student name, email, year, and course.
+- Refresh student data.
+
+Selecting a student opens `StudentDetailsPage`, passing the student's Firestore document ID as `studentId` and email.
+
+Existing accounts without profile fields should display fallback values rather than causing errors.
 
 ### Student details
 
@@ -256,6 +375,13 @@ Selecting a student opens `StudentDetailsPage`, which displays that student's su
 
 `AdminSubjectsManagementPage` displays registered students and lets the administrator select a student.
 
+The student list supports:
+
+- Search by name or email.
+- Year-level filter.
+- Course filter.
+- Display name, email, year, and course.
+
 `AdminStudentSubjectsPage` manages the selected student's subjects.
 
 Administrators can:
@@ -268,21 +394,26 @@ When deleting a subject, check whether schedules reference its ID. Prevent delet
 
 Use the existing `SubjectForm` rather than creating a separate form implementation.
 
+Keep the selected student's ID when loading, saving, and deleting subjects.
+
 ### Schedule management
 
 `AdminSchedulesManagementPage` displays schedules across students.
 
-Administrators can:
+It supports:
 
-- View all schedules.
-- Filter schedules by student.
-- Search for a student by email using the search icon.
-- Add schedules for a selected student.
-- Edit existing schedules.
-- Delete schedules.
-- View the subject, student email, day, time, and room.
+- Viewing all schedules.
+- Searching for students by name or email.
+- Filtering by year level.
+- Filtering by course.
+- Selecting an individual student or All Students.
+- Adding schedules for a selected student.
+- Editing existing schedules.
+- Deleting schedules.
+- Viewing the subject, student information, day, time, and room.
+- Sorting schedules by day and start time.
 
-The student email search should filter the student selection, not modify stored student email data.
+When adding a schedule with All Students selected, allow the administrator to choose the student for whom the schedule is being created.
 
 Use `AdminScheduleData` to load and organize student, subject, and schedule information.
 
@@ -290,13 +421,49 @@ Use `AdminSessionFormPage` for adding and editing schedules.
 
 When editing, pass the existing `ClassSession` as `initial` so the form retains its current values.
 
+Student email search should filter the student selection or displayed schedules, not modify stored student email data.
+
 ### Room management
 
 `AdminRoomManagementPage` displays room assignments grouped by room.
 
 Room assignments are stored in the `room` field of schedule documents. Do not create a separate room collection for ordinary room management.
 
+The room management page supports:
+
+- Search by student name or email.
+- Filter by year level.
+- Filter by course.
+- Display student name, email, year, and course for each matching schedule.
+- Show the number of room groups and scheduled classes matching the filters.
+- Group matching schedules by room.
+- Sort rooms alphabetically.
+- Sort schedules within each room by day and start time.
+- Expand and collapse room groups.
+- Edit existing room assignments.
+
 Editing a room assignment should update the associated schedule through the existing admin schedule form.
+
+Use `AdminSessionFormPage` and pass the existing `ClassSession` as `initial`.
+
+Keep the existing room grouping and editing behavior when updating this page.
+
+### Admin schedule data
+
+`AdminScheduleData` is responsible for loading:
+
+- Registered students.
+- All schedules.
+- Each student's subjects.
+
+It provides helpers for resolving:
+
+- Student email from student ID.
+- Subject details from a schedule's subject ID.
+- Subject name.
+- Subject code.
+
+Reuse `AdminScheduleData` instead of repeating student/subject/schedule loading logic across admin pages.
 
 ---
 
@@ -343,13 +510,50 @@ Preserve all existing fields when editing a schedule. In particular, do not acci
 
 ### AppUser
 
-`AppUser` contains:
+`AppUser` currently contains:
 
-- `uid`
-- `email`
-- `role`
+```dart
+enum UserRole {
+  student,
+  admin,
+}
 
-Use `UserRole.student` and `UserRole.admin` instead of comparing role labels throughout the UI.
+class AppUser {
+  const AppUser({
+    required this.uid,
+    required this.email,
+    required this.role,
+    this.name,
+    this.year,
+    this.course,
+  });
+
+  final String uid;
+  final String email;
+  final UserRole role;
+
+  final String? name;
+  final String? year;
+  final String? course;
+
+  String get roleLabel =>
+      role == UserRole.admin ? 'Admin' : 'Student';
+}
+```
+
+The `name`, `year`, and `course` properties are nullable.
+
+`AuthService` loads these fields from the student's Firestore document when available.
+
+Admin users do not require student profile fields.
+
+When changing `AppUser`, update all relevant constructors and mappings, including:
+
+- `AuthService.register()`
+- `AuthService._getAppUser()`
+- Any test fakes or mock `AppUser` construction that needs updating.
+
+Do not remove the nullable behavior for older accounts or admin accounts.
 
 ### RoomStatus
 
@@ -507,3 +711,7 @@ Handle Firebase and database exceptions appropriately. Show understandable feedb
 10. When adding model fields, update mapping methods, forms, Firestore data handling, and SQLite migrations if applicable.
 11. Run `flutter analyze` after changes and resolve all reported issues.
 12. Prefer complete, consistent file updates over isolated snippets when replacing an existing file.
+13. When modifying an existing file, request or inspect its current complete contents before replacing it if the current implementation is not available.
+14. Preserve existing behavior unless a change is explicitly requested.
+15. For code updates, provide complete replacement files when practical, with file paths and clear testing steps.
+16. Do not assume older student accounts already have profile fields. Handle missing values safely and do not break authentication for those accounts.

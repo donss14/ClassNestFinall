@@ -31,55 +31,61 @@ class AuthProvider extends ChangeNotifier {
   }
 
   Future<String?> signIn(String email, String password) async {
-  try {
-    final user = await _auth.signIn(
-      email: email,
-      password: password,
-    );
+    try {
+      final user = await _auth.signIn(
+        email: email,
+        password: password,
+      );
 
-    if (user == null) {
-      return 'Could not sign in.';
+      if (user == null) {
+        return 'Could not sign in.';
+      }
+
+      _user = user;
+      notifyListeners();
+
+      return null;
+    } catch (e, stackTrace) {
+      debugPrint('SIGN IN ERROR: $e');
+      debugPrint('STACK TRACE: $stackTrace');
+
+      return _errorMessage(e);
     }
-
-    _user = user;
-    notifyListeners();
-
-    return null;
-  } catch (e, stackTrace) {
-    debugPrint('SIGN IN ERROR: $e');
-    debugPrint('STACK TRACE: $stackTrace');
-
-    return _errorMessage(e);
   }
-}
 
   Future<String?> register(
-  String email,
-  String password,
-  UserRole role,
-) async {
-  try {
-    final user = await _auth.register(
-      email: email,
-      password: password,
-      role: role,
-    );
+    String email,
+    String password,
+    UserRole role,
+    String name,
+    String year,
+    String course,
+  ) async {
+    try {
+      final user = await _auth.register(
+        email: email,
+        password: password,
+        role: role,
+        name: name,
+        year: year,
+        course: course,
+      );
 
-    if (user == null) {
-      return 'Could not create account.';
+      if (user == null) {
+        return 'Could not create account.';
+      }
+
+      _user = user;
+      notifyListeners();
+
+      return null;
+    } catch (e, stackTrace) {
+      debugPrint('REGISTRATION ERROR: $e');
+      debugPrint('STACK TRACE: $stackTrace');
+
+      return _errorMessage(e);
     }
-
-    _user = user;
-    notifyListeners();
-
-    return null;
-  } catch (e, stackTrace) {
-    debugPrint('REGISTRATION ERROR: $e');
-    debugPrint('STACK TRACE: $stackTrace');
-
-    return _errorMessage(e);
   }
-}
 
   Future<void> signOut() async {
     try {

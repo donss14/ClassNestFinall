@@ -1,4 +1,3 @@
-
 import 'package:flutter_test/flutter_test.dart';
 import 'package:provider/provider.dart';
 import 'package:shared_preferences_platform_interface/shared_preferences_async_platform_interface.dart';
@@ -26,6 +25,9 @@ class TestAuthService implements AuthService {
     required String email,
     required String password,
     required UserRole role,
+    required String name,
+    required String year,
+    required String course,
   }) async => null;
 
   @override

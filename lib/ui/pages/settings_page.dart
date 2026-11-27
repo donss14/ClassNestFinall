@@ -1,3 +1,4 @@
+
 import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
 
@@ -17,54 +18,103 @@ class SettingsPage extends StatelessWidget {
       padding: const EdgeInsets.all(16),
       children: [
         if (user != null) ...[
-          Text('Account', style: theme.textTheme.titleMedium),
+          Text(
+            'Account',
+            style: theme.textTheme.titleMedium,
+          ),
           const SizedBox(height: 8),
           Card(
-            child: ListTile(
-              leading: const Icon(Icons.person_outline),
-              title: Text(user.email),
-              subtitle: Text(user.roleLabel),
+            child: Column(
+              children: [
+                ListTile(
+                  leading: const Icon(Icons.person_outline),
+                  title: const Text('Name'),
+                  subtitle: Text(
+                    user.name ?? 'Name not provided',
+                  ),
+                ),
+                const Divider(height: 1),
+                ListTile(
+                  leading: const Icon(Icons.email_outlined),
+                  title: const Text('Email'),
+                  subtitle: Text(user.email),
+                ),
+                const Divider(height: 1),
+                ListTile(
+                  leading: const Icon(Icons.school_outlined),
+                  title: const Text('Year Level'),
+                  subtitle: Text(
+                    user.year ?? 'Year not set',
+                  ),
+                ),
+                const Divider(height: 1),
+                ListTile(
+                  leading: const Icon(Icons.menu_book_outlined),
+                  title: const Text('Course'),
+                  subtitle: Text(
+                    user.course ?? 'Course not set',
+                  ),
+                ),
+                const Divider(height: 1),
+                ListTile(
+                  leading: const Icon(Icons.verified_user_outlined),
+                  title: const Text('Account Type'),
+                  subtitle: Text(user.roleLabel),
+                ),
+              ],
             ),
           ),
           const SizedBox(height: 8),
           OutlinedButton.icon(
-            onPressed: () => context.read<AuthProvider>().signOut(),
+            onPressed: () =>
+                context.read<AuthProvider>().signOut(),
             icon: const Icon(Icons.logout),
             label: const Text('Sign out'),
           ),
           const SizedBox(height: 32),
         ],
-        Text('Appearance', style: theme.textTheme.titleMedium),
+        Text(
+          'Appearance',
+          style: theme.textTheme.titleMedium,
+        ),
         const SizedBox(height: 12),
         SegmentedButton<ThemeMode>(
           segments: const [
             ButtonSegment(
-                value: ThemeMode.system,
-                icon: Icon(Icons.brightness_auto),
-                label: Text('System')),
+              value: ThemeMode.system,
+              icon: Icon(Icons.brightness_auto),
+              label: Text('System'),
+            ),
             ButtonSegment(
-                value: ThemeMode.light,
-                icon: Icon(Icons.light_mode),
-                label: Text('Light')),
+              value: ThemeMode.light,
+              icon: Icon(Icons.light_mode),
+              label: Text('Light'),
+            ),
             ButtonSegment(
-                value: ThemeMode.dark,
-                icon: Icon(Icons.dark_mode),
-                label: Text('Dark')),
+              value: ThemeMode.dark,
+              icon: Icon(Icons.dark_mode),
+              label: Text('Dark'),
+            ),
           ],
           selected: {themeProvider.themeMode},
           onSelectionChanged: (set) =>
               context.read<ThemeProvider>().setThemeMode(set.first),
         ),
         const SizedBox(height: 32),
-        Text('About', style: theme.textTheme.titleMedium),
+        Text(
+          'About',
+          style: theme.textTheme.titleMedium,
+        ),
         const SizedBox(height: 8),
         const Card(
           child: ListTile(
             leading: Icon(Icons.school_outlined),
             title: Text('ClassNest'),
             subtitle: Text(
-                'Class schedules and room assignments for students of '
-                "Divine Word College of Legazpi.\nGroup DPinili - CC105A"),
+              'Class schedules and room assignments for students of '
+              'Divine Word College of Legazpi.\n'
+              'Group DPinili - CC105A',
+            ),
             isThreeLine: true,
           ),
         ),

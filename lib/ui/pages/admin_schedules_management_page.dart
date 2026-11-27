@@ -20,13 +20,32 @@ class _AdminSchedulesManagementPageState
   late final FirestoreService _firestore;
   late Future<AdminScheduleData> _dataFuture;
 
+  final TextEditingController _searchController =
+      TextEditingController();
+
   String _selectedStudentId = 'all';
+  String _selectedYear = 'All Years';
+  String _selectedCourse = 'All Courses';
+
+  final List<String> _yearOptions = [
+    'All Years',
+    '1st Year',
+    '2nd Year',
+    '3rd Year',
+    '4th Year',
+  ];
 
   @override
   void initState() {
     super.initState();
     _firestore = context.read<FirestoreService>();
     _loadData();
+  }
+
+  @override
+  void dispose() {
+    _searchController.dispose();
+    super.dispose();
   }
 
   void _loadData() {
@@ -62,106 +81,71 @@ class _AdminSchedulesManagementPageState
     return '$displayHour:${minute.toString().padLeft(2, '0')} $period';
   }
 
-  Future<void> _searchStudent(AdminScheduleData data) async {
-    final selectedId = await showDialog<String>(
-      context: context,
-      builder: (dialogContext) {
-        String searchQuery = '';
+  Map<String, dynamic>? _studentForSchedule(
+    Map<String, dynamic> schedule,
+    AdminScheduleData data,
+  ) {
+    final studentId = schedule['studentId'] as String?;
 
-        return StatefulBuilder(
-          builder: (context, setDialogState) {
-            final filteredStudents = data.students.where((student) {
-              final email =
-                  student['email'] as String? ?? '';
+    if (studentId == null) return null;
 
-              return email.toLowerCase().contains(
-                    searchQuery.trim().toLowerCase(),
-                  );
-            }).toList();
+    for (final student in data.students) {
+      if (student['id'] == studentId) {
+        return student;
+      }
+    }
 
-            return AlertDialog(
-              title: const Text('Search student'),
-              content: SizedBox(
-                width: double.maxFinite,
-                height: 350,
-                child: Column(
-                  children: [
-                    TextField(
-                      autofocus: true,
-                      decoration: const InputDecoration(
-                        hintText: 'Enter student email...',
-                        prefixIcon: Icon(Icons.search),
-                        border: OutlineInputBorder(),
-                      ),
-                      onChanged: (value) {
-                        setDialogState(() {
-                          searchQuery = value;
-                        });
-                      },
-                    ),
-                    const SizedBox(height: 12),
-                    Expanded(
-                      child: ListView(
-                        children: [
-                          ListTile(
-                            leading: const Icon(Icons.people),
-                            title: const Text('All students'),
-                            selected: _selectedStudentId == 'all',
-                            onTap: () {
-                              Navigator.pop(dialogContext, 'all');
-                            },
-                          ),
-                          const Divider(),
-                          if (filteredStudents.isEmpty)
-                            const Padding(
-                              padding: EdgeInsets.all(16),
-                              child: Text(
-                                'No students found.',
-                                textAlign: TextAlign.center,
-                              ),
-                            )
-                          else
-                            ...filteredStudents.map((student) {
-                              final id = student['id'] as String;
-                              final email =
-                                  student['email'] as String? ??
-                                      'Unknown student';
+    return null;
+  }
 
-                              return ListTile(
-                                leading: const Icon(Icons.person_outline),
-                                title: Text(
-                                  email,
-                                  overflow: TextOverflow.ellipsis,
-                                ),
-                                selected: _selectedStudentId == id,
-                                onTap: () {
-                                  Navigator.pop(dialogContext, id);
-                                },
-                              );
-                            }),
-                        ],
-                      ),
-                    ),
-                  ],
-                ),
-              ),
-              actions: [
-                TextButton(
-                  onPressed: () => Navigator.pop(dialogContext),
-                  child: const Text('Cancel'),
-                ),
-              ],
-            );
-          },
-        );
-      },
-    );
+  List<String> _getCourseOptions(AdminScheduleData data) {
+    final courses = data.students
+        .map((student) => student['course'] as String? ?? '')
+        .where((course) => course.trim().isNotEmpty)
+        .toSet()
+        .toList();
 
-    if (!mounted || selectedId == null) return;
+    courses.sort();
 
-    setState(() {
-      _selectedStudentId = selectedId;
-    });
+    return ['All Courses', ...courses];
+  }
+
+  bool _matchesStudentFilters(
+    Map<String, dynamic> schedule,
+    AdminScheduleData data,
+  ) {
+    final student = _studentForSchedule(schedule, data);
+
+    if (student == null) return false;
+
+    final search = _searchController.text.trim().toLowerCase();
+
+    final name =
+        (student['name'] as String? ?? '').toLowerCase();
+
+    final email =
+        (student['email'] as String? ?? '').toLowerCase();
+
+    final year = student['year'] as String? ?? '';
+    final course = student['course'] as String? ?? '';
+
+    final matchesSearch = search.isEmpty ||
+        name.contains(search) ||
+        email.contains(search);
+
+    final matchesYear = _selectedYear == 'All Years' ||
+        year == _selectedYear;
+
+    final matchesCourse = _selectedCourse == 'All Courses' ||
+        course == _selectedCourse;
+
+    final matchesSelectedStudent = _selectedStudentId == 'all' ||
+        schedule['studentId'] == _selectedStudentId;
+
+    return matchesSearch &&
+        matchesYear &&
+        matchesCourse &&
+        matchesSelectedStudent;
   }
 
   Future<void> _openAddSchedule(AdminScheduleData data) async {
@@ -177,12 +161,33 @@ class _AdminSchedulesManagementPageState
             title: const Text('Select a student'),
             children: data.students.map((student) {
               final id = student['id'] as String;
+              final name =
+                  student['name'] as String? ?? 'Name not provided';
               final email =
                   student['email'] as String? ?? 'Unknown student';
+              final year =
+                  student['year'] as String? ?? 'Year not set';
+              final course =
+                  student['course'] as String? ?? 'Course not set';
 
               return SimpleDialogOption(
                 onPressed: () => Navigator.pop(dialogContext, id),
-                child: Text(email),
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Text(
+                      name,
+                      style: const TextStyle(
+                        fontWeight: FontWeight.bold,
+                      ),
+                    ),
+                    Text(email),
+                    Text(
+                      '$year • $course',
+                      style: Theme.of(context).textTheme.bodySmall,
+                    ),
+                  ],
+                ),
               );
             }).toList(),
           );
@@ -239,7 +244,9 @@ class _AdminSchedulesManagementPageState
     }
   }
 
-  Future<void> _deleteSchedule(Map<String, dynamic> schedule) async {
+  Future<void> _deleteSchedule(
+    Map<String, dynamic> schedule,
+  ) async {
     final scheduleId = schedule['id'] as String?;
     if (scheduleId == null) return;
 
@@ -322,19 +329,36 @@ class _AdminSchedulesManagementPageState
             return Center(
               child: Padding(
                 padding: const EdgeInsets.all(24),
-                child: Text(
-                  'Could not load schedules: ${snapshot.error}',
+                child: Column(
+                  mainAxisSize: MainAxisSize.min,
+                  children: [
+                    Text(
+                      'Could not load schedules: ${snapshot.error}',
+                    ),
+                    const SizedBox(height: 8),
+                    ElevatedButton(
+                      onPressed: _refresh,
+                      child: const Text('Try again'),
+                    ),
+                  ],
                 ),
               ),
             );
           }
 
           final data = snapshot.data!;
+          final courseOptions = _getCourseOptions(data);
 
-          final filteredSchedules = data.schedules.where((schedule) {
-            if (_selectedStudentId == 'all') return true;
-            return schedule['studentId'] == _selectedStudentId;
-          }).toList();
+          if (!courseOptions.contains(_selectedCourse)) {
+            _selectedCourse = 'All Courses';
+          }
+
+          final filteredSchedules = data.schedules
+              .where(
+                (schedule) =>
+                    _matchesStudentFilters(schedule, data),
+              )
+              .toList();
 
           filteredSchedules.sort((a, b) {
             final dayComparison =
@@ -349,75 +373,152 @@ class _AdminSchedulesManagementPageState
             );
           });
 
-          final selectedStudentEmail = _selectedStudentId == 'all'
-              ? 'All students'
-              : data.studentEmail(_selectedStudentId);
+          final selectedStudent = _selectedStudentId == 'all'
+              ? null
+              : data.students.cast<Map<String, dynamic>?>().firstWhere(
+                    (student) =>
+                        student?['id'] == _selectedStudentId,
+                    orElse: () => null,
+                  );
+
+          final selectedStudentLabel =
+              selectedStudent == null
+                  ? 'All students'
+                  : '${selectedStudent['name'] as String? ?? 'Name not provided'} '
+                      '(${selectedStudent['email'] as String? ?? 'No email'})';
 
           return RefreshIndicator(
             onRefresh: _refresh,
             child: ListView(
               padding: const EdgeInsets.all(16),
               children: [
+                TextField(
+                  controller: _searchController,
+                  onChanged: (_) => setState(() {}),
+                  decoration: InputDecoration(
+                    hintText: 'Search student name or email',
+                    prefixIcon: const Icon(Icons.search),
+                    suffixIcon: _searchController.text.isEmpty
+                        ? null
+                        : IconButton(
+                            icon: const Icon(Icons.clear),
+                            onPressed: () {
+                              _searchController.clear();
+                              setState(() {});
+                            },
+                          ),
+                    border: OutlineInputBorder(
+                      borderRadius: BorderRadius.circular(12),
+                    ),
+                  ),
+                ),
+                const SizedBox(height: 12),
                 Row(
                   children: [
                     Expanded(
                       child: DropdownButtonFormField<String>(
-                        initialValue: _selectedStudentId,
+                        key: ValueKey(_selectedYear),
+                        initialValue: _selectedYear,
                         isExpanded: true,
                         decoration: const InputDecoration(
-                          labelText: 'Filter by student',
+                          labelText: 'Year Level',
                           border: OutlineInputBorder(),
                         ),
-                        items: [
-                          const DropdownMenuItem(
-                            value: 'all',
-                            child: Text('All students'),
-                          ),
-                          ...data.students.map((student) {
-                            final id = student['id'] as String;
-                            final email =
-                                student['email'] as String? ??
-                                    'Unknown student';
-
-                            return DropdownMenuItem(
-                              value: id,
-                              child: Text(
-                                email,
-                                overflow: TextOverflow.ellipsis,
-                              ),
-                            );
-                          }),
-                        ],
+                        items: _yearOptions.map((year) {
+                          return DropdownMenuItem(
+                            value: year,
+                            child: Text(
+                              year,
+                              overflow: TextOverflow.ellipsis,
+                            ),
+                          );
+                        }).toList(),
                         onChanged: (value) {
-                          setState(() {
-                            _selectedStudentId = value ?? 'all';
-                          });
+                          if (value != null) {
+                            setState(() {
+                              _selectedYear = value;
+                            });
+                          }
                         },
                       ),
                     ),
-                    const SizedBox(width: 8),
-                    IconButton(
-                      tooltip: 'Search student by email',
-                      onPressed: () => _searchStudent(data),
-                      icon: const Icon(Icons.search),
-                      style: IconButton.styleFrom(
-                        backgroundColor:
-                            Theme.of(context).colorScheme.primaryContainer,
-                        foregroundColor:
-                            Theme.of(context).colorScheme.onPrimaryContainer,
+                    const SizedBox(width: 10),
+                    Expanded(
+                      child: DropdownButtonFormField<String>(
+                        key: ValueKey(_selectedCourse),
+                        initialValue: _selectedCourse,
+                        isExpanded: true,
+                        decoration: const InputDecoration(
+                          labelText: 'Course',
+                          border: OutlineInputBorder(),
+                        ),
+                        items: courseOptions.map((course) {
+                          return DropdownMenuItem(
+                            value: course,
+                            child: Text(
+                              course,
+                              overflow: TextOverflow.ellipsis,
+                            ),
+                          );
+                        }).toList(),
+                        onChanged: (value) {
+                          if (value != null) {
+                            setState(() {
+                              _selectedCourse = value;
+                            });
+                          }
+                        },
                       ),
                     ),
                   ],
                 ),
+                const SizedBox(height: 12),
+                DropdownButtonFormField<String>(
+                  key: ValueKey(_selectedStudentId),
+                  initialValue: _selectedStudentId,
+                  isExpanded: true,
+                  decoration: const InputDecoration(
+                    labelText: 'Filter by student',
+                    border: OutlineInputBorder(),
+                  ),
+                  items: [
+                    const DropdownMenuItem(
+                      value: 'all',
+                      child: Text('All students'),
+                    ),
+                    ...data.students.map((student) {
+                      final id = student['id'] as String;
+                      final name =
+                          student['name'] as String? ??
+                              'Name not provided';
+                      final email =
+                          student['email'] as String? ??
+                              'Unknown student';
+
+                      return DropdownMenuItem(
+                        value: id,
+                        child: Text(
+                          '$name ($email)',
+                          overflow: TextOverflow.ellipsis,
+                        ),
+                      );
+                    }),
+                  ],
+                  onChanged: (value) {
+                    setState(() {
+                      _selectedStudentId = value ?? 'all';
+                    });
+                  },
+                ),
                 const SizedBox(height: 8),
                 Text(
-                  'Selected: $selectedStudentEmail',
+                  'Selected: $selectedStudentLabel',
                   style: Theme.of(context).textTheme.bodySmall,
                   overflow: TextOverflow.ellipsis,
                 ),
                 const SizedBox(height: 16),
                 Text(
-                  '${filteredSchedules.length} schedule(s)',
+                  '${filteredSchedules.length} schedule(s) found',
                   style: Theme.of(context).textTheme.titleMedium,
                 ),
                 const SizedBox(height: 8),
@@ -425,32 +526,57 @@ class _AdminSchedulesManagementPageState
                   const Padding(
                     padding: EdgeInsets.all(24),
                     child: Center(
-                      child: Text('No schedules found.'),
+                      child: Text(
+                        'No schedules match your search or filters.',
+                        textAlign: TextAlign.center,
+                      ),
                     ),
                   )
                 else
                   ...filteredSchedules.map((schedule) {
                     final studentId =
                         schedule['studentId'] as String?;
+
                     final day =
                         schedule['dayOfWeek'] as int? ?? 0;
+
                     final start =
                         schedule['startMinutes'] as int? ?? 0;
+
                     final end =
                         schedule['endMinutes'] as int? ?? 0;
+
                     final room =
                         schedule['room'] as String? ??
                             'No room assigned';
+
+                    final student = _studentForSchedule(
+                      schedule,
+                      data,
+                    );
+
+                    final studentName =
+                        student?['name'] as String? ??
+                            'Name not provided';
 
                     final studentEmail = studentId == null
                         ? 'Unknown student'
                         : data.studentEmail(studentId);
 
+                    final year =
+                        student?['year'] as String? ??
+                            'Year not set';
+
+                    final course =
+                        student?['course'] as String? ??
+                            'Course not set';
+
                     return Card(
                       margin: const EdgeInsets.only(bottom: 12),
                       child: ListTile(
                         title: Text(
-                          '${data.subjectCode(schedule)} ${data.subjectName(schedule)}',
+                          '${data.subjectCode(schedule)} '
+                          '${data.subjectName(schedule)}',
                           style: const TextStyle(
                             fontWeight: FontWeight.bold,
                           ),
@@ -461,10 +587,14 @@ class _AdminSchedulesManagementPageState
                             crossAxisAlignment:
                                 CrossAxisAlignment.start,
                             children: [
+                              Text('Student: $studentName'),
                               Text(studentEmail),
+                              Text('$year • $course'),
+                              const SizedBox(height: 4),
                               Text(_dayName(day)),
                               Text(
-                                '${_formatTime(start)} - ${_formatTime(end)}',
+                                '${_formatTime(start)} - '
+                                '${_formatTime(end)}',
                               ),
                               Text('Room: $room'),
                             ],
